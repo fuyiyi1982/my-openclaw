@@ -14,6 +14,7 @@ import {
   attachThemeListener,
   detachThemeListener,
   inferBasePath,
+  syncLanguageWithSettings,
   syncTabWithLocation,
   syncThemeWithSettings,
 } from "./app-settings.ts";
@@ -38,6 +39,7 @@ export function handleConnected(host: LifecycleHost) {
   applySettingsFromUrl(host as unknown as Parameters<typeof applySettingsFromUrl>[0]);
   syncTabWithLocation(host as unknown as Parameters<typeof syncTabWithLocation>[0], true);
   syncThemeWithSettings(host as unknown as Parameters<typeof syncThemeWithSettings>[0]);
+  syncLanguageWithSettings(host as unknown as Parameters<typeof syncLanguageWithSettings>[0]);
   attachThemeListener(host as unknown as Parameters<typeof attachThemeListener>[0]);
   window.addEventListener("popstate", host.popStateHandler);
   connectGateway(host as unknown as Parameters<typeof connectGateway>[0]);

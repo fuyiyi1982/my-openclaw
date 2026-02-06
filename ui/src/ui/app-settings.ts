@@ -33,6 +33,7 @@ import {
 import { saveSettings, type UiSettings } from "./storage.ts";
 import { startThemeTransition, type ThemeTransitionContext } from "./theme-transition.ts";
 import { resolveTheme, type ResolvedTheme, type ThemeMode } from "./theme.ts";
+import { setLanguage } from "./i18n.ts";
 
 type SettingsHost = {
   settings: UiSettings;
@@ -57,12 +58,16 @@ type SettingsHost = {
 };
 
 export function applySettings(host: SettingsHost, next: UiSettings) {
+  const previousLanguage = host.settings.language;
   const normalized = {
     ...next,
     lastActiveSessionKey: next.lastActiveSessionKey?.trim() || next.sessionKey.trim() || "main",
   };
   host.settings = normalized;
   saveSettings(normalized);
+  if (normalized.language !== previousLanguage) {
+    setLanguage(normalized.language);
+  }
   if (next.theme !== host.theme) {
     host.theme = next.theme;
     applyResolvedTheme(host, resolveTheme(next.theme));
@@ -253,6 +258,10 @@ export function inferBasePath() {
 export function syncThemeWithSettings(host: SettingsHost) {
   host.theme = host.settings.theme ?? "system";
   applyResolvedTheme(host, resolveTheme(host.theme));
+}
+
+export function syncLanguageWithSettings(host: SettingsHost) {
+  setLanguage(host.settings.language ?? "en");
 }
 
 export function applyResolvedTheme(host: SettingsHost, resolved: ResolvedTheme) {

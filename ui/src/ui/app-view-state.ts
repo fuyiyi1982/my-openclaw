@@ -68,9 +68,18 @@ export type AppViewState = {
   nodes: Array<Record<string, unknown>>;
   chatNewMessagesBelow: boolean;
   sidebarOpen: boolean;
+  sidebarMode: "tool" | "context";
   sidebarContent: string | null;
   sidebarError: string | null;
   splitRatio: number;
+  contextLoading: boolean;
+  contextError: string | null;
+  contextFilesList: AgentsFilesListResult | null;
+  contextFileContents: Record<string, string>;
+  contextFileDrafts: Record<string, string>;
+  contextFileActive: string | null;
+  contextFileSaving: boolean;
+  contextAgentId: string | null;
   scrollToBottom: () => void;
   devicesLoading: boolean;
   devicesError: string | null;
@@ -154,6 +163,7 @@ export type AppViewState = {
   usageError: string | null;
   usageStartDate: string;
   usageEndDate: string;
+  usageTokenInput: string;
   usageSelectedSessions: string[];
   usageSelectedDays: string[];
   usageSelectedHours: number[];
@@ -280,5 +290,10 @@ export type AppViewState = {
   handleLogsScroll: (event: Event) => void;
   handleOpenSidebar: (content: string) => void;
   handleCloseSidebar: () => void;
+  handleOpenContextSidebar: () => void;
+  handleSelectContextFile: (name: string) => void;
+  handleContextDraftChange: (name: string, content: string) => void;
+  handleContextFileRefresh: (name: string) => void;
+  handleContextFileSave: (name: string) => void;
   handleSplitRatioChange: (ratio: number) => void;
 };

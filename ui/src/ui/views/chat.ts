@@ -13,6 +13,9 @@ import { normalizeMessage, normalizeRoleForGrouping } from "../chat/message-norm
 import { icons } from "../icons.ts";
 import { renderMarkdownSidebar } from "./markdown-sidebar.ts";
 import "../components/resizable-divider.ts";
+import { t } from "../i18n.ts";
+import { formatAgo } from "../format.ts";
+import type { ContextEntry } from "../context-utils.ts";
 
 export type CompactionIndicatorStatus = {
   active: boolean;
@@ -45,11 +48,24 @@ export type ChatProps = {
   focusMode: boolean;
   // Sidebar state
   sidebarOpen?: boolean;
+  sidebarMode?: "tool" | "context";
   sidebarContent?: string | null;
   sidebarError?: string | null;
   splitRatio?: number;
   assistantName: string;
   assistantAvatar: string | null;
+  // Context sidebar
+  contextLoading?: boolean;
+  contextError?: string | null;
+  contextEntries?: ContextEntry[];
+  contextActiveName?: string | null;
+  contextDrafts?: Record<string, string>;
+  contextContents?: Record<string, string>;
+  contextSaving?: boolean;
+  onContextSelect?: (name: string) => void;
+  onContextDraftChange?: (name: string, value: string) => void;
+  onContextRefresh?: (name: string) => void;
+  onContextSave?: (name: string) => void;
   // Image attachments
   attachments?: ChatAttachment[];
   onAttachmentsChange?: (attachments: ChatAttachment[]) => void;
@@ -86,7 +102,7 @@ function renderCompactionIndicator(status: CompactionIndicatorStatus | null | un
   if (status.active) {
     return html`
       <div class="callout info compaction-indicator compaction-indicator--active">
-        ${icons.loader} Compacting context...
+        ${icons.loader} ${t("Compacting context...")}
       </div>
     `;
   }
@@ -97,7 +113,7 @@ function renderCompactionIndicator(status: CompactionIndicatorStatus | null | un
     if (elapsed < COMPACTION_TOAST_DURATION_MS) {
       return html`
         <div class="callout success compaction-indicator compaction-indicator--complete">
-          ${icons.check} Context compacted
+          ${icons.check} ${t("Context compacted")}
         </div>
       `;
     }
@@ -185,6 +201,114 @@ function renderAttachmentPreview(props: ChatProps) {
   `;
 }
 
+function renderContextSidebar(props: ChatProps) {
+  const entries = props.contextEntries ?? [];
+  if (!entries.length) {
+    return html`
+      <div class="sidebar-panel">
+        <div class="sidebar-header">
+          <div class="sidebar-title">${t("Context")}</div>
+          <button class="btn" type="button" @click=${props.onCloseSidebar}>${icons.x}</button>
+        </div>
+        <div class="sidebar-content">
+          <div class="muted">${t("No context file yet.")}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  const activeName = props.contextActiveName ?? entries[0].name;
+  const activeEntry = entries.find((entry) => entry.name === activeName) ?? entries[0];
+  const drafts = props.contextDrafts ?? {};
+  const contents = props.contextContents ?? {};
+  const draft = drafts[activeEntry.name] ?? "";
+  const base = contents[activeEntry.name] ?? "";
+  const dirty = draft !== base;
+  const lastUpdated =
+    typeof activeEntry.updatedAtMs === "number" ? formatAgo(activeEntry.updatedAtMs) : null;
+
+  return html`
+    <div class="sidebar-panel">
+      <div class="sidebar-header">
+        <div class="sidebar-title">${t("Context")}</div>
+        <button class="btn" type="button" @click=${props.onCloseSidebar}>${icons.x}</button>
+      </div>
+      <div class="sidebar-content">
+        ${
+          props.contextError
+            ? html`<div class="callout danger" style="margin-bottom: 12px;">${props.contextError}</div>`
+            : nothing
+        }
+        ${
+          props.contextLoading
+            ? html`<div class="callout info" style="margin-bottom: 12px;">${t("Loading")}</div>`
+            : nothing
+        }
+        <div class="context-tabs">
+          ${entries.map(
+            (entry) => html`
+              <button
+                class="context-tab ${entry.name === activeEntry.name ? "active" : ""}"
+                type="button"
+                @click=${() => props.onContextSelect?.(entry.name)}
+              >
+                <div class="context-tab__title">${t(entry.labelKey)}</div>
+                <div class="context-tab__sub">
+                  ${t(entry.descriptionKey, { file: entry.name })}
+                </div>
+              </button>
+            `,
+          )}
+        </div>
+        <div class="context-editor">
+          <div class="context-meta">
+            <span class="mono">${activeEntry.name}</span>
+            ${
+              lastUpdated
+                ? html`<span class="muted">${t("Last updated {time}", { time: lastUpdated })}</span>`
+                : nothing
+            }
+          </div>
+          <textarea
+            class="context-textarea"
+            .value=${draft}
+            ?disabled=${props.contextLoading}
+            @input=${(e: Event) =>
+              props.onContextDraftChange?.(activeEntry.name, (e.target as HTMLTextAreaElement).value)}
+            placeholder=${t("No context file yet.")}
+          ></textarea>
+          <div class="context-actions">
+            <button
+              class="btn btn--sm"
+              type="button"
+              ?disabled=${props.contextLoading}
+              @click=${() => props.onContextRefresh?.(activeEntry.name)}
+            >
+              ${t("Reload")}
+            </button>
+            <button
+              class="btn btn--sm"
+              type="button"
+              ?disabled=${props.contextLoading || !dirty}
+              @click=${() => props.onContextDraftChange?.(activeEntry.name, base)}
+            >
+              ${t("Reset")}
+            </button>
+            <button
+              class="btn btn--sm primary"
+              type="button"
+              ?disabled=${props.contextLoading || props.contextSaving || !dirty}
+              @click=${() => props.onContextSave?.(activeEntry.name)}
+            >
+              ${props.contextSaving ? t("Saving…") : t("Save")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 export function renderChat(props: ChatProps) {
   const canCompose = props.connected;
   const isBusy = props.sending || props.stream !== null;
@@ -200,12 +324,13 @@ export function renderChat(props: ChatProps) {
   const hasAttachments = (props.attachments?.length ?? 0) > 0;
   const composePlaceholder = props.connected
     ? hasAttachments
-      ? "Add a message or paste more images..."
-      : "Message (↩ to send, Shift+↩ for line breaks, paste images)"
-    : "Connect to the gateway to start chatting…";
+      ? t("Add a message or paste more images...")
+      : t("Message (↩ to send, Shift+↩ for line breaks, paste images)")
+    : t("Connect to the gateway to start chatting…");
 
   const splitRatio = props.splitRatio ?? 0.6;
   const sidebarOpen = Boolean(props.sidebarOpen && props.onCloseSidebar);
+  const sidebarMode = props.sidebarMode ?? "tool";
   const thread = html`
     <div
       class="chat-thread"
@@ -216,7 +341,7 @@ export function renderChat(props: ChatProps) {
       ${
         props.loading
           ? html`
-              <div class="muted">Loading chat…</div>
+              <div class="muted">${t("Loading chat…")}</div>
             `
           : nothing
       }
@@ -267,8 +392,8 @@ export function renderChat(props: ChatProps) {
               class="chat-focus-exit"
               type="button"
               @click=${props.onToggleFocusMode}
-              aria-label="Exit focus mode"
-              title="Exit focus mode"
+              aria-label=${t("Exit focus mode")}
+              title=${t("Exit focus mode")}
             >
               ${icons.x}
             </button>
@@ -294,17 +419,21 @@ export function renderChat(props: ChatProps) {
                 @resize=${(e: CustomEvent) => props.onSplitRatioChange?.(e.detail.splitRatio)}
               ></resizable-divider>
               <div class="chat-sidebar">
-                ${renderMarkdownSidebar({
-                  content: props.sidebarContent ?? null,
-                  error: props.sidebarError ?? null,
-                  onClose: props.onCloseSidebar!,
-                  onViewRawText: () => {
-                    if (!props.sidebarContent || !props.onOpenSidebar) {
-                      return;
-                    }
-                    props.onOpenSidebar(`\`\`\`\n${props.sidebarContent}\n\`\`\``);
-                  },
-                })}
+                ${
+                  sidebarMode === "context"
+                    ? renderContextSidebar(props)
+                    : renderMarkdownSidebar({
+                        content: props.sidebarContent ?? null,
+                        error: props.sidebarError ?? null,
+                        onClose: props.onCloseSidebar!,
+                        onViewRawText: () => {
+                          if (!props.sidebarContent || !props.onOpenSidebar) {
+                            return;
+                          }
+                          props.onOpenSidebar(`\`\`\`\n${props.sidebarContent}\n\`\`\``);
+                        },
+                      })
+                }
               </div>
             `
             : nothing
@@ -315,7 +444,7 @@ export function renderChat(props: ChatProps) {
         props.queue.length
           ? html`
             <div class="chat-queue" role="status" aria-live="polite">
-              <div class="chat-queue__title">Queued (${props.queue.length})</div>
+              <div class="chat-queue__title">${t("Queued ({count})", { count: props.queue.length })}</div>
               <div class="chat-queue__list">
                 ${props.queue.map(
                   (item) => html`
@@ -323,13 +452,15 @@ export function renderChat(props: ChatProps) {
                       <div class="chat-queue__text">
                         ${
                           item.text ||
-                          (item.attachments?.length ? `Image (${item.attachments.length})` : "")
+                          (item.attachments?.length
+                            ? t("Image ({count})", { count: item.attachments.length })
+                            : "")
                         }
                       </div>
                       <button
                         class="btn chat-queue__remove"
                         type="button"
-                        aria-label="Remove queued message"
+                        aria-label=${t("Remove queued message")}
                         @click=${() => props.onQueueRemove(item.id)}
                       >
                         ${icons.x}
@@ -351,7 +482,7 @@ export function renderChat(props: ChatProps) {
               type="button"
               @click=${props.onScrollToBottom}
             >
-              New messages ${icons.arrowDown}
+              ${t("New messages")} ${icons.arrowDown}
             </button>
           `
           : nothing

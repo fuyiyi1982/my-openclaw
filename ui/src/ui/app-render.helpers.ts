@@ -10,9 +10,11 @@ import { OpenClawApp } from "./app.ts";
 import { ChatState, loadChatHistory } from "./controllers/chat.ts";
 import { icons } from "./icons.ts";
 import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
+import { t } from "./i18n.ts";
 
 export function renderTab(state: AppViewState, tab: Tab) {
   const href = pathForTab(tab, state.basePath);
+  const title = titleForTab(tab);
   return html`
     <a
       href=${href}
@@ -31,10 +33,10 @@ export function renderTab(state: AppViewState, tab: Tab) {
         event.preventDefault();
         state.setTab(tab);
       }}
-      title=${titleForTab(tab)}
+      title=${title}
     >
       <span class="nav-item__icon" aria-hidden="true">${icons[iconForTab(tab)]}</span>
-      <span class="nav-item__text">${titleForTab(tab)}</span>
+      <span class="nav-item__text">${title}</span>
     </a>
   `;
 }
@@ -130,7 +132,7 @@ export function renderChatControls(state: AppViewState) {
           (state as unknown as OpenClawApp).resetToolStream();
           void refreshChat(state as unknown as Parameters<typeof refreshChat>[0]);
         }}
-        title="Refresh chat data"
+        title=${t("Refresh chat data")}
       >
         ${refreshIcon}
       </button>
@@ -150,8 +152,8 @@ export function renderChatControls(state: AppViewState) {
         aria-pressed=${showThinking}
         title=${
           disableThinkingToggle
-            ? "Disabled during onboarding"
-            : "Toggle assistant thinking/working output"
+            ? t("Disabled during onboarding")
+            : t("Toggle assistant thinking/working output")
         }
       >
         ${icons.brain}
@@ -171,11 +173,19 @@ export function renderChatControls(state: AppViewState) {
         aria-pressed=${focusActive}
         title=${
           disableFocusToggle
-            ? "Disabled during onboarding"
-            : "Toggle focus mode (hide sidebar + page header)"
+            ? t("Disabled during onboarding")
+            : t("Toggle focus mode (hide sidebar + page header)")
         }
       >
         ${focusIcon}
+      </button>
+      <button
+        class="btn btn--sm btn--icon"
+        ?disabled=${!state.connected}
+        @click=${() => state.handleOpenContextSidebar()}
+        title=${t("Context panel")}
+      >
+        ${icons.fileText}
       </button>
     </div>
   `;
@@ -278,14 +288,14 @@ export function renderThemeToggle(state: AppViewState) {
 
   return html`
     <div class="theme-toggle" style="--theme-index: ${index};">
-      <div class="theme-toggle__track" role="group" aria-label="Theme">
+      <div class="theme-toggle__track" role="group" aria-label=${t("Theme")}>
         <span class="theme-toggle__indicator"></span>
         <button
           class="theme-toggle__button ${state.theme === "system" ? "active" : ""}"
           @click=${applyTheme("system")}
           aria-pressed=${state.theme === "system"}
-          aria-label="System theme"
-          title="System"
+          aria-label=${t("System theme")}
+          title=${t("System")}
         >
           ${renderMonitorIcon()}
         </button>
@@ -293,8 +303,8 @@ export function renderThemeToggle(state: AppViewState) {
           class="theme-toggle__button ${state.theme === "light" ? "active" : ""}"
           @click=${applyTheme("light")}
           aria-pressed=${state.theme === "light"}
-          aria-label="Light theme"
-          title="Light"
+          aria-label=${t("Light theme")}
+          title=${t("Light")}
         >
           ${renderSunIcon()}
         </button>
@@ -302,12 +312,44 @@ export function renderThemeToggle(state: AppViewState) {
           class="theme-toggle__button ${state.theme === "dark" ? "active" : ""}"
           @click=${applyTheme("dark")}
           aria-pressed=${state.theme === "dark"}
-          aria-label="Dark theme"
-          title="Dark"
+          aria-label=${t("Dark theme")}
+          title=${t("Dark")}
         >
           ${renderMoonIcon()}
         </button>
       </div>
+    </div>
+  `;
+}
+
+export function renderLanguageToggle(state: AppViewState) {
+  const current = state.settings.language ?? "en";
+  return html`
+    <div class="language-toggle" role="group" aria-label=${t("Language")}>
+      <button
+        class="language-toggle__button ${current === "en" ? "active" : ""}"
+        @click=${() =>
+          state.applySettings({
+            ...state.settings,
+            language: "en",
+          })}
+        aria-pressed=${current === "en"}
+        title=${t("English")}
+      >
+        EN
+      </button>
+      <button
+        class="language-toggle__button ${current === "zh" ? "active" : ""}"
+        @click=${() =>
+          state.applySettings({
+            ...state.settings,
+            language: "zh",
+          })}
+        aria-pressed=${current === "zh"}
+        title=${t("Chinese")}
+      >
+        中
+      </button>
     </div>
   `;
 }

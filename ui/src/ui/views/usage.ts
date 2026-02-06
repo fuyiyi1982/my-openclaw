@@ -1,5 +1,7 @@
 import { html, svg, nothing } from "lit";
 import { extractQueryTerms, filterSessionsByQuery, parseToolSummary } from "../usage-helpers.ts";
+import { estimateTokens } from "../token-estimate.ts";
+import { t } from "../i18n.ts";
 
 // Inline styles for usage view (app uses light DOM, so static styles don't work)
 const usageStylesString = `
@@ -16,6 +18,44 @@ const usageStylesString = `
     font-size: 13px;
     color: var(--text-muted);
     margin: 0 0 12px;
+  }
+  .usage-token-estimator {
+    display: grid;
+    gap: 12px;
+  }
+  .usage-token-estimator textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.5;
+    resize: vertical;
+  }
+  .usage-token-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+  }
+  .usage-token-stat {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+  }
+  .usage-token-stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .usage-token-stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    margin-top: 6px;
   }
   /* ===== FILTERS & HEADER ===== */
   .usage-filters-inline {
@@ -2127,6 +2167,7 @@ export type UsageProps = {
   error: string | null;
   startDate: string;
   endDate: string;
+  tokenInput: string;
   sessions: UsageSessionEntry[];
   sessionsLimitReached: boolean; // True if 1000 session cap was hit
   totals: UsageTotals | null;
@@ -2183,6 +2224,7 @@ export type UsageProps = {
   onClearFilters: () => void;
   onQueryDraftChange: (query: string) => void;
   onApplyQuery: () => void;
+  onTokenInputChange: (next: string) => void;
   onClearQuery: () => void;
   onSessionSortChange: (sort: "tokens" | "cost" | "recent" | "messages" | "errors") => void;
   onSessionSortDirChange: (dir: "asc" | "desc") => void;
@@ -4651,7 +4693,7 @@ export function renderUsage(props: UsageProps) {
         <div class="row" style="justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
           <div style="flex: 1; min-width: 250px;">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 2px;">
-              <div class="card-title" style="margin: 0;">Token Usage</div>
+              <div class="card-title" style="margin: 0;">${t("Token Usage")}</div>
               <span style="
                 display: inline-flex;
                 align-items: center;
@@ -4670,14 +4712,14 @@ export function renderUsage(props: UsageProps) {
                   border-radius: 50%;
                   animation: initial-spin 0.6s linear infinite;
                 "></span>
-                Loading
+                ${t("Loading")}
               </span>
             </div>
           </div>
           <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
             <div style="display: flex; gap: 8px; align-items: center;">
               <input type="date" .value=${props.startDate} disabled style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 13px; opacity: 0.6;" />
-              <span style="color: var(--text-muted);">to</span>
+              <span style="color: var(--text-muted);">${t("to")}</span>
               <input type="date" .value=${props.endDate} disabled style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 13px; opacity: 0.6;" />
             </div>
           </div>
@@ -4689,6 +4731,7 @@ export function renderUsage(props: UsageProps) {
   const isTokenMode = props.chartMode === "tokens";
   const hasQuery = props.query.trim().length > 0;
   const hasDraftQuery = props.queryDraft.trim().length > 0;
+  const tokenEstimate = estimateTokens(props.tokenInput);
   // (intentionally no global Clear button in the header; chips + query clear handle this)
 
   // Sort sessions by tokens or cost depending on mode
@@ -5039,8 +5082,40 @@ export function renderUsage(props: UsageProps) {
     <style>${usageStylesString}</style>
 
     <section class="usage-page-header">
-      <div class="usage-page-title">Usage</div>
-      <div class="usage-page-subtitle">See where tokens go, when sessions spike, and what drives cost.</div>
+      <div class="usage-page-title">${t("Usage")}</div>
+      <div class="usage-page-subtitle">${t("See where tokens go, when sessions spike, and what drives cost.")}</div>
+    </section>
+
+    <section class="card usage-token-estimator">
+      <div>
+        <div class="card-title">${t("Token Estimator")}</div>
+        <div class="card-sub">
+          ${t("Paste text to estimate tokens (approximate tiktoken-style).")}
+        </div>
+      </div>
+      <textarea
+        .value=${props.tokenInput}
+        @input=${(e: Event) => props.onTokenInputChange((e.target as HTMLTextAreaElement).value)}
+        placeholder=${t("Paste text to estimate tokens (approximate tiktoken-style).")}
+      ></textarea>
+      <div class="usage-token-stats">
+        <div class="usage-token-stat">
+          <div class="usage-token-stat-label">${t("Estimated tokens")}</div>
+          <div class="usage-token-stat-value">${tokenEstimate.tokens}</div>
+        </div>
+        <div class="usage-token-stat">
+          <div class="usage-token-stat-label">${t("Characters")}</div>
+          <div class="usage-token-stat-value">${tokenEstimate.chars}</div>
+        </div>
+        <div class="usage-token-stat">
+          <div class="usage-token-stat-label">${t("Words")}</div>
+          <div class="usage-token-stat-value">${tokenEstimate.words}</div>
+        </div>
+        <div class="usage-token-stat">
+          <div class="usage-token-stat-label">${t("CJK chars")}</div>
+          <div class="usage-token-stat-value">${tokenEstimate.cjkChars}</div>
+        </div>
+      </div>
     </section>
 
     <section class="card usage-header ${props.headerPinned ? "pinned" : ""}">

@@ -9,6 +9,7 @@ import type { SkillMessage } from "./controllers/skills.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import type { Tab } from "./navigation.ts";
 import type { ResolvedTheme, ThemeMode } from "./theme.ts";
+import { parseAgentSessionKey } from "../../../src/sessions/session-key-utils.js";
 import type {
   AgentsListResult,
   AgentsFilesListResult,
@@ -76,8 +77,15 @@ import {
   type ToolStreamEntry,
   type CompactionStatus,
 } from "./app-tool-stream.ts";
+import {
+  loadContextFiles,
+  loadContextFileContent,
+  saveContextFile,
+} from "./controllers/context.ts";
 import { resolveInjectedAssistantIdentity } from "./assistant-identity.ts";
 import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./controllers/assistant-identity.ts";
+import { resolveContextEntries } from "./context-utils.ts";
+import { t } from "./i18n.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import { type ChatAttachment, type ChatQueueItem, type CronFormState } from "./ui-types.ts";
 
@@ -138,9 +146,18 @@ export class OpenClawApp extends LitElement {
   @state() chatAttachments: ChatAttachment[] = [];
   // Sidebar state for tool output viewing
   @state() sidebarOpen = false;
+  @state() sidebarMode: "tool" | "context" = "tool";
   @state() sidebarContent: string | null = null;
   @state() sidebarError: string | null = null;
   @state() splitRatio = this.settings.splitRatio;
+  @state() contextLoading = false;
+  @state() contextError: string | null = null;
+  @state() contextFilesList: AgentsFilesListResult | null = null;
+  @state() contextFileContents: Record<string, string> = {};
+  @state() contextFileDrafts: Record<string, string> = {};
+  @state() contextFileActive: string | null = null;
+  @state() contextFileSaving = false;
+  @state() contextAgentId: string | null = null;
 
   @state() nodesLoading = false;
   @state() nodes: Array<Record<string, unknown>> = [];
@@ -239,6 +256,7 @@ export class OpenClawApp extends LitElement {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   })();
+  @state() usageTokenInput = "";
   @state() usageSelectedSessions: string[] = [];
   @state() usageSelectedDays: string[] = [];
   @state() usageSelectedHours: number[] = [];
@@ -536,9 +554,100 @@ export class OpenClawApp extends LitElement {
       window.clearTimeout(this.sidebarCloseTimer);
       this.sidebarCloseTimer = null;
     }
+    this.sidebarMode = "tool";
     this.sidebarContent = content;
     this.sidebarError = null;
     this.sidebarOpen = true;
+  }
+
+  private resolveContextAgentId(): string | null {
+    const parsed = parseAgentSessionKey(this.sessionKey);
+    if (parsed?.agentId) {
+      return parsed.agentId;
+    }
+    const snapshot = this.hello?.snapshot as
+      | { sessionDefaults?: { defaultAgentId?: string } }
+      | undefined;
+    const fallback = snapshot?.sessionDefaults?.defaultAgentId?.trim();
+    return fallback || "main";
+  }
+
+  private resetContextState() {
+    this.contextFilesList = null;
+    this.contextFileContents = {};
+    this.contextFileDrafts = {};
+    this.contextFileActive = null;
+    this.contextError = null;
+  }
+
+  async handleOpenContextSidebar() {
+    if (this.sidebarCloseTimer != null) {
+      window.clearTimeout(this.sidebarCloseTimer);
+      this.sidebarCloseTimer = null;
+    }
+    this.sidebarMode = "context";
+    this.sidebarOpen = true;
+    const agentId = this.resolveContextAgentId();
+    if (!agentId) {
+      this.contextError = t("No agent resolved for this session.");
+      return;
+    }
+    if (this.contextAgentId !== agentId) {
+      this.contextAgentId = agentId;
+      this.resetContextState();
+    }
+    await loadContextFiles(this as unknown as Parameters<typeof loadContextFiles>[0], agentId);
+    const entries = resolveContextEntries(this.contextFilesList);
+    if (!this.contextFileActive && entries.length > 0) {
+      const initial = entries[0];
+      this.contextFileActive = initial.name;
+      await loadContextFileContent(
+        this as unknown as Parameters<typeof loadContextFileContent>[0],
+        agentId,
+        initial.name,
+      );
+    }
+  }
+
+  async handleSelectContextFile(name: string) {
+    if (!this.contextAgentId) {
+      return;
+    }
+    this.contextFileActive = name;
+    await loadContextFileContent(
+      this as unknown as Parameters<typeof loadContextFileContent>[0],
+      this.contextAgentId,
+      name,
+    );
+  }
+
+  handleContextDraftChange(name: string, content: string) {
+    this.contextFileDrafts = { ...this.contextFileDrafts, [name]: content };
+  }
+
+  async handleContextFileRefresh(name: string) {
+    if (!this.contextAgentId) {
+      return;
+    }
+    await loadContextFileContent(
+      this as unknown as Parameters<typeof loadContextFileContent>[0],
+      this.contextAgentId,
+      name,
+      { force: true, preserveDraft: false },
+    );
+  }
+
+  async handleContextFileSave(name: string) {
+    if (!this.contextAgentId) {
+      return;
+    }
+    const content = this.contextFileDrafts[name] ?? "";
+    await saveContextFile(
+      this as unknown as Parameters<typeof saveContextFile>[0],
+      this.contextAgentId,
+      name,
+      content,
+    );
   }
 
   handleCloseSidebar() {
@@ -551,8 +660,10 @@ export class OpenClawApp extends LitElement {
       if (this.sidebarOpen) {
         return;
       }
-      this.sidebarContent = null;
-      this.sidebarError = null;
+      if (this.sidebarMode === "tool") {
+        this.sidebarContent = null;
+        this.sidebarError = null;
+      }
       this.sidebarCloseTimer = null;
     }, 200);
   }

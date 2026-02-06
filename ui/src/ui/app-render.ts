@@ -3,7 +3,7 @@ import type { AppViewState } from "./app-view-state.ts";
 import type { UsageState } from "./controllers/usage.ts";
 import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
 import { refreshChatAvatar } from "./app-chat.ts";
-import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
+import { renderChatControls, renderLanguageToggle, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
 import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.ts";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
@@ -53,6 +53,8 @@ import {
 import { loadUsage, loadSessionTimeSeries, loadSessionLogs } from "./controllers/usage.ts";
 import { icons } from "./icons.ts";
 import { normalizeBasePath, TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation.ts";
+import { t } from "./i18n.ts";
+import { resolveContextEntries } from "./context-utils.ts";
 
 // Module-scope debounce for usage date changes (avoids type-unsafe hacks on state object)
 let usageDateDebounceTimeout: number | null = null;
@@ -138,16 +140,17 @@ export function renderApp(state: AppViewState) {
             </div>
             <div class="brand-text">
               <div class="brand-title">OPENCLAW</div>
-              <div class="brand-sub">Gateway Dashboard</div>
+              <div class="brand-sub">${t("Gateway Dashboard")}</div>
             </div>
           </div>
         </div>
         <div class="topbar-status">
           <div class="pill">
             <span class="statusDot ${state.connected ? "ok" : ""}"></span>
-            <span>Health</span>
-            <span class="mono">${state.connected ? "OK" : "Offline"}</span>
+            <span>${t("Health")}</span>
+            <span class="mono">${state.connected ? t("OK") : t("Offline")}</span>
           </div>
+          ${renderLanguageToggle(state)}
           ${renderThemeToggle(state)}
         </div>
       </header>
@@ -155,6 +158,7 @@ export function renderApp(state: AppViewState) {
         ${TAB_GROUPS.map((group) => {
           const isGroupCollapsed = state.settings.navGroupsCollapsed[group.label] ?? false;
           const hasActiveTab = group.tabs.some((tab) => tab === state.tab);
+          const groupLabel = group.label;
           return html`
             <div class="nav-group ${isGroupCollapsed && !hasActiveTab ? "nav-group--collapsed" : ""}">
               <button
@@ -169,7 +173,7 @@ export function renderApp(state: AppViewState) {
                 }}
                 aria-expanded=${!isGroupCollapsed}
               >
-                <span class="nav-label__text">${group.label}</span>
+                <span class="nav-label__text">${t(groupLabel)}</span>
                 <span class="nav-label__chevron">${isGroupCollapsed ? "+" : "−"}</span>
               </button>
               <div class="nav-group__items">
@@ -180,7 +184,7 @@ export function renderApp(state: AppViewState) {
         })}
         <div class="nav-group nav-group--links">
           <div class="nav-label nav-label--static">
-            <span class="nav-label__text">Resources</span>
+            <span class="nav-label__text">${t("Resources")}</span>
           </div>
           <div class="nav-group__items">
             <a
@@ -191,7 +195,7 @@ export function renderApp(state: AppViewState) {
               title="Docs (opens in new tab)"
             >
               <span class="nav-item__icon" aria-hidden="true">${icons.book}</span>
-              <span class="nav-item__text">Docs</span>
+              <span class="nav-item__text">${t("Docs")}</span>
             </a>
           </div>
         </div>
@@ -1065,6 +1069,12 @@ export function renderApp(state: AppViewState) {
                   state.chatQueue = [];
                   state.resetToolStream();
                   state.resetChatScroll();
+                  state.contextAgentId = null;
+                  state.contextFilesList = null;
+                  state.contextFileContents = {};
+                  state.contextFileDrafts = {};
+                  state.contextFileActive = null;
+                  state.contextError = null;
                   state.applySettings({
                     ...state.settings,
                     sessionKey: next,
@@ -1118,6 +1128,7 @@ export function renderApp(state: AppViewState) {
                 onScrollToBottom: () => state.scrollToBottom(),
                 // Sidebar props for tool output viewing
                 sidebarOpen: state.sidebarOpen,
+                sidebarMode: state.sidebarMode,
                 sidebarContent: state.sidebarContent,
                 sidebarError: state.sidebarError,
                 splitRatio: state.splitRatio,
@@ -1126,6 +1137,18 @@ export function renderApp(state: AppViewState) {
                 onSplitRatioChange: (ratio: number) => state.handleSplitRatioChange(ratio),
                 assistantName: state.assistantName,
                 assistantAvatar: state.assistantAvatar,
+                contextLoading: state.contextLoading,
+                contextError: state.contextError,
+                contextEntries: resolveContextEntries(state.contextFilesList),
+                contextActiveName: state.contextFileActive,
+                contextDrafts: state.contextFileDrafts,
+                contextContents: state.contextFileContents,
+                contextSaving: state.contextFileSaving,
+                onContextSelect: (name: string) => state.handleSelectContextFile(name),
+                onContextDraftChange: (name: string, value: string) =>
+                  state.handleContextDraftChange(name, value),
+                onContextRefresh: (name: string) => state.handleContextFileRefresh(name),
+                onContextSave: (name: string) => state.handleContextFileSave(name),
               })
             : nothing
         }
