@@ -18,6 +18,10 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="MIT License"></a>
 </p>
 
+[English](#english) | [中文](#中文)
+
+## English
+
 **OpenClaw** is a _personal AI assistant_ you run on your own devices.
 It answers you on the channels you already use (WhatsApp, Telegram, Slack, Discord, Google Chat, Signal, iMessage, Microsoft Teams, WebChat), plus extension channels like BlueBubbles, Matrix, Zalo, and Zalo Personal. It can speak and listen on macOS/iOS/Android, and can render a live Canvas you control. The Gateway is just the control plane — the product is the assistant.
 
@@ -54,6 +58,12 @@ openclaw onboard --install-daemon
 
 The wizard installs the Gateway daemon (launchd/systemd user service) so it stays running.
 
+Ubuntu one-click (from repo checkout):
+
+```bash
+./scripts/install-ubuntu.sh
+```
+
 ## Quick start (TL;DR)
 
 Runtime: **Node ≥22**.
@@ -70,6 +80,43 @@ openclaw message send --to +1234567890 --message "Hello from OpenClaw"
 
 # Talk to the assistant (optionally deliver back to any connected channel: WhatsApp/Telegram/Slack/Discord/Google Chat/Signal/iMessage/BlueBubbles/Microsoft Teams/Matrix/Zalo/Zalo Personal/WebChat)
 openclaw agent --message "Ship checklist" --thinking high
+```
+
+## 中文
+
+**OpenClaw** 是你在自己设备上运行的个人 AI 助手，支持 WhatsApp、Telegram、Slack、Discord、Google Chat、Signal、iMessage、Microsoft Teams、WebChat 等渠道，并可扩展更多渠道。
+
+[官网](https://openclaw.ai) · [文档](https://docs.openclaw.ai) · [入门指南](https://docs.openclaw.ai/start/getting-started) · [更新指南](https://docs.openclaw.ai/install/updating) · [Docker](https://docs.openclaw.ai/install/docker)
+
+推荐使用向导安装：
+
+```bash
+npm install -g openclaw@latest
+openclaw onboard --install-daemon
+```
+
+Ubuntu 一键安装（在仓库根目录执行，会检查依赖并注册 systemd 用户服务）：
+
+```bash
+./scripts/install-ubuntu.sh
+```
+
+快速测试：
+
+```bash
+openclaw onboard --install-daemon
+openclaw gateway --port 18789 --verbose
+openclaw message send --to +1234567890 --message "Hello from OpenClaw"
+openclaw agent --message "Ship checklist" --thinking high
+```
+
+从源码构建（开发）：
+
+```bash
+pnpm install
+pnpm ui:build
+pnpm build
+pnpm openclaw onboard --install-daemon
 ```
 
 Upgrading? [Updating guide](https://docs.openclaw.ai/install/updating) (and run `openclaw doctor`).
